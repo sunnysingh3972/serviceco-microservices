@@ -58,3 +58,5 @@ application.properties
 
 # Java
 *.class
+
+**/src/main/resources/application.properties
