@@ -1,9 +1,6 @@
 package com.serviceco.serviceco_provider_service.controller;
 
-import com.serviceco.serviceco_provider_service.model.dto.AvailabilityUpdateRequest;
-import com.serviceco.serviceco_provider_service.model.dto.ProviderRequest;
-import com.serviceco.serviceco_provider_service.model.dto.ProviderResponse;
-import com.serviceco.serviceco_provider_service.model.dto.ProviderSearchResponse;
+import com.serviceco.serviceco_provider_service.model.dto.*;
 import com.serviceco.serviceco_provider_service.services.ProviderServiceImpl;
 import com.serviceco.serviceco_provider_service.utility.ProviderStatus;
 import jakarta.validation.Valid;
@@ -101,5 +98,39 @@ public class ProvderController {
         return ResponseEntity.ok(
                 providerService.updateAvailability(id, request)
         );
+    }
+    @PostMapping("/{providerId}/skills")
+    public ResponseEntity<SkillResponse> addSkill(
+            @PathVariable Long providerId,
+            @Valid @RequestBody SkillRequest request) {
+
+        return ResponseEntity
+                .status(HttpStatus.CREATED)
+                .body(
+                        providerService.addSkill(
+                                providerId,
+                                request
+                        )
+                );
+    }
+    @GetMapping("/{providerId}/skills")
+    public ResponseEntity<List<SkillResponse>> getSkills(
+            @PathVariable Long providerId) {
+
+        return ResponseEntity.ok(
+                providerService.getSkills(providerId)
+        );
+    }
+    @DeleteMapping("/{providerId}/skills/{skillId}")
+    public ResponseEntity<Void> deleteSkill(
+            @PathVariable Long providerId,
+            @PathVariable Long skillId) {
+
+        providerService.deleteSkill(
+                providerId,
+                skillId
+        );
+
+        return ResponseEntity.noContent().build();
     }
 }

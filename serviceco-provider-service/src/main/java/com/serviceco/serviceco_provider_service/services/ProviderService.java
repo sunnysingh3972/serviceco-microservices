@@ -1,9 +1,6 @@
 package com.serviceco.serviceco_provider_service.services;
 
-import com.serviceco.serviceco_provider_service.model.dto.AvailabilityUpdateRequest;
-import com.serviceco.serviceco_provider_service.model.dto.ProviderRequest;
-import com.serviceco.serviceco_provider_service.model.dto.ProviderResponse;
-import com.serviceco.serviceco_provider_service.model.dto.ProviderSearchResponse;
+import com.serviceco.serviceco_provider_service.model.dto.*;
 import com.serviceco.serviceco_provider_service.utility.ProviderStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -40,5 +37,18 @@ public interface  ProviderService {
     ProviderResponse updateAvailability(
             Long id,
             AvailabilityUpdateRequest request
+    );
+    SkillResponse addSkill(
+            Long providerId,
+            SkillRequest request
+    );
+
+    List<SkillResponse> getSkills(
+            Long providerId
+    );
+
+    void deleteSkill(
+            Long providerId,
+            Long skillId
     );
 }

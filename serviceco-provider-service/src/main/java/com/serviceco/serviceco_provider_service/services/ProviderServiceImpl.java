@@ -2,12 +2,11 @@ package com.serviceco.serviceco_provider_service.services;
 
 import com.serviceco.serviceco_provider_service.exception.ProviderNotFoundException;
 import com.serviceco.serviceco_provider_service.mapper.ProviderMapper;
-import com.serviceco.serviceco_provider_service.model.dto.AvailabilityUpdateRequest;
-import com.serviceco.serviceco_provider_service.model.dto.ProviderRequest;
-import com.serviceco.serviceco_provider_service.model.dto.ProviderResponse;
-import com.serviceco.serviceco_provider_service.model.dto.ProviderSearchResponse;
+import com.serviceco.serviceco_provider_service.model.dto.*;
 import com.serviceco.serviceco_provider_service.model.entity.Provider;
+import com.serviceco.serviceco_provider_service.model.entity.ProviderSkill;
 import com.serviceco.serviceco_provider_service.repository.ProviderRepository;
+import com.serviceco.serviceco_provider_service.repository.ProviderSkillRepository;
 import com.serviceco.serviceco_provider_service.utility.ProviderStatus;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -15,12 +14,15 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+
 @Service
 @RequiredArgsConstructor
 @Transactional
 public class ProviderServiceImpl implements ProviderService{
     private final ProviderRepository providerRepository;
     private final ProviderMapper providerMapper;
+    private  final ProviderSkillRepository providerSkillRepository;
     @Override
     public ProviderResponse createProvider(ProviderRequest request) {
         Provider provider=providerMapper.toEntity(request);
@@ -109,5 +111,86 @@ public class ProviderServiceImpl implements ProviderService{
         provider.setStatus(request.status());
 
         return providerMapper.toResponse(provider);
+    }
+
+    @Override
+    @Transactional
+    public SkillResponse addSkill(
+            Long providerId,
+            SkillRequest request) {
+
+        providerRepository.findById(providerId)
+                .orElseThrow(() ->
+                        new ProviderNotFoundException(
+                                "Provider not found with id: " + providerId
+                        ));
+
+        boolean alreadyExists =
+                providerSkillRepository
+                        .existsByProviderIdAndSkillNameIgnoreCase(
+                                providerId,
+                                request.skillName()
+                        );
+
+        if (alreadyExists) {
+            throw new IllegalArgumentException(
+                    "Skill already exists for this provider"
+            );
+        }
+
+        ProviderSkill skill = ProviderSkill.builder()
+                .skillName(request.skillName().trim().toUpperCase())
+                .provider(
+                        providerRepository
+                                .findById(providerId)
+                                .orElseThrow()
+                )
+                .build();
+
+        ProviderSkill savedSkill =
+                providerSkillRepository.save(skill);
+
+        return new SkillResponse(
+                savedSkill.getId(),
+                savedSkill.getSkillName()
+        );
+    }
+
+    @Override
+    @Transactional
+    public List<SkillResponse> getSkills(Long providerId) {
+        providerRepository.findById(providerId)
+                .orElseThrow(() ->
+                        new ProviderNotFoundException(
+                                "Provider not found with id: " + providerId
+                        ));
+
+        return providerSkillRepository
+                .findByProviderIdOrderBySkillNameAsc(providerId)
+                .stream()
+                .map(skill ->
+                        new SkillResponse(
+                                skill.getId(),
+                                skill.getSkillName()
+                        )
+                )
+                .toList();
+    }
+
+    @Override
+    @Transactional
+    public void deleteSkill(Long providerId, Long skillId) {
+        ProviderSkill skill =
+                providerSkillRepository
+                        .findByIdAndProviderId(
+                                skillId,
+                                providerId
+                        )
+                        .orElseThrow(() ->
+                                new IllegalArgumentException(
+                                        "Skill not found for this provider"
+                                ));
+
+        providerSkillRepository.delete(skill);
     }
 }
