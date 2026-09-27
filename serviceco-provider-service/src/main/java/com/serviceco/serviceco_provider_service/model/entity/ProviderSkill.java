@@ -6,6 +6,12 @@ import lombok.*;
 @Entity
 @Table(
         name = "provider_skills",
+        uniqueConstraints = {
+                @UniqueConstraint(
+                        name = "uk_provider_skill",
+                        columnNames = {"provider_id", "skill_name"}
+                )
+        },
         indexes = {
                 @Index(
                         name = "idx_skill_name",

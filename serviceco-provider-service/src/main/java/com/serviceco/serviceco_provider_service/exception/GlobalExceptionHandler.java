@@ -65,4 +65,20 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(error);
-    }}
+    }
+    @ExceptionHandler(DuplicateSkillException.class)
+    public ResponseEntity<ApiError> handleDuplicateSkill(
+            DuplicateSkillException ex) {
+
+        ApiError error = new ApiError(
+                HttpStatus.CONFLICT.value(),
+                ex.getMessage(),
+                LocalDateTime.now()
+        );
+
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(error);
+    }
+
+}

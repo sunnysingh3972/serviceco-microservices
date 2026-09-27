@@ -34,7 +34,7 @@ public class ProvderController {
     }
 
     @GetMapping
-    public ResponseEntity<Page<ProviderResponse>> getAllProviders(@RequestParam(required = false)
+    public ResponseEntity<Page<ProviderSummaryResponse>> getAllProviders(@RequestParam(required = false)
                                                                        String location,
                                                                   @PageableDefault(
                                                                            page = 0,

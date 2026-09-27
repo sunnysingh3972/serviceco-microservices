@@ -5,9 +5,12 @@ import com.serviceco.serviceco_provider_service.model.entity.Provider;
 import com.serviceco.serviceco_provider_service.utility.ProviderStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+
+import java.util.Optional;
 
 public interface ProviderRepository extends JpaRepository<Provider,Long> {
 
@@ -39,5 +42,14 @@ public interface ProviderRepository extends JpaRepository<Provider,Long> {
             @Param("skill") String skill,
             @Param("status") ProviderStatus status,
             Pageable pageable
+    );
+    @EntityGraph(attributePaths = "skills")
+    @Query("""
+            SELECT p
+            FROM Provider p
+            WHERE p.id = :id
+            """)
+    Optional<Provider> findByIdWithSkills(
+            @Param("id") Long id
     );
 }

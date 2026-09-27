@@ -16,7 +16,7 @@ public interface  ProviderService {
 
     ProviderResponse getProvider(Long id);
 
-    Page<ProviderResponse> getAllProviders(
+    Page<ProviderSummaryResponse> getAllProviders(
             String location,
             Pageable pageable
     );

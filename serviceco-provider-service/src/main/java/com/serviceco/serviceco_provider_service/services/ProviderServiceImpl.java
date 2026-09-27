@@ -1,5 +1,6 @@
 package com.serviceco.serviceco_provider_service.services;
 
+import com.serviceco.serviceco_provider_service.exception.DuplicateSkillException;
 import com.serviceco.serviceco_provider_service.exception.ProviderNotFoundException;
 import com.serviceco.serviceco_provider_service.mapper.ProviderMapper;
 import com.serviceco.serviceco_provider_service.model.dto.*;
@@ -33,20 +34,20 @@ public class ProviderServiceImpl implements ProviderService{
     @Override
     @Transactional(readOnly = true)
     public ProviderResponse getProvider(Long id) {
-       Provider provider= providerRepository.findById(id).orElseThrow(()->new ProviderNotFoundException("Provider not find by "+id));
+       Provider provider= providerRepository.findByIdWithSkills(id).orElseThrow(()->new ProviderNotFoundException("Provider not find by "+id));
         return providerMapper.toResponse(provider);
     }
 
     @Override
     @Transactional(readOnly = true)
-    public Page<ProviderResponse> getAllProviders(String location, Pageable pageable) {
+    public Page<ProviderSummaryResponse> getAllProviders(String location, Pageable pageable) {
         Page<Provider> providers=null;
         if(location==null||location.isBlank()){
             providers=providerRepository.findAll(pageable);
         }else{
             providers=providerRepository.findByLocationIgnoreCase(location,pageable);
         }
-        return providers.map(providerMapper::toResponse);
+        return providers.map(providerMapper::toSummaryResponse);
 
     }
 
@@ -133,7 +134,7 @@ public class ProviderServiceImpl implements ProviderService{
                         );
 
         if (alreadyExists) {
-            throw new IllegalArgumentException(
+            throw new DuplicateSkillException(
                     "Skill already exists for this provider"
             );
         }

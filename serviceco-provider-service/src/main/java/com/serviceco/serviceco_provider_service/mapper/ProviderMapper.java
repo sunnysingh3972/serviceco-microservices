@@ -2,6 +2,7 @@ package com.serviceco.serviceco_provider_service.mapper;
 
 import com.serviceco.serviceco_provider_service.model.dto.ProviderRequest;
 import com.serviceco.serviceco_provider_service.model.dto.ProviderResponse;
+import com.serviceco.serviceco_provider_service.model.dto.ProviderSummaryResponse;
 import com.serviceco.serviceco_provider_service.model.entity.Provider;
 import com.serviceco.serviceco_provider_service.model.entity.ProviderSkill;
 import com.serviceco.serviceco_provider_service.utility.ProviderStatus;
@@ -57,6 +58,18 @@ public class ProviderMapper {
                 provider.getRating(),
                 provider.getStatus(),
                 skills
+        );
+    }
+    public ProviderSummaryResponse toSummaryResponse(
+            Provider provider) {
+
+        return new ProviderSummaryResponse(
+                provider.getId(),
+                provider.getName(),
+                provider.getLocation(),
+                provider.getHourlyRate(),
+                provider.getRating(),
+                provider.getStatus()
         );
     }
 }
