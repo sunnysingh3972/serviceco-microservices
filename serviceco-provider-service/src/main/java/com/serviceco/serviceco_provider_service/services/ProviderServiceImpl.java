@@ -120,11 +120,12 @@ public class ProviderServiceImpl implements ProviderService{
             Long providerId,
             SkillRequest request) {
 
-        providerRepository.findById(providerId)
-                .orElseThrow(() ->
-                        new ProviderNotFoundException(
-                                "Provider not found with id: " + providerId
-                        ));
+        Provider provider =
+                providerRepository.findById(providerId)
+                        .orElseThrow(() ->
+                                new ProviderNotFoundException(
+                                        "Provider not found with id: " + providerId
+                                ));
 
         boolean alreadyExists =
                 providerSkillRepository
@@ -140,12 +141,12 @@ public class ProviderServiceImpl implements ProviderService{
         }
 
         ProviderSkill skill = ProviderSkill.builder()
-                .skillName(request.skillName().trim().toUpperCase())
-                .provider(
-                        providerRepository
-                                .findById(providerId)
-                                .orElseThrow()
+                .skillName(
+                        request.skillName()
+                                .trim()
+                                .toUpperCase()
                 )
+                .provider(provider)
                 .build();
 
         ProviderSkill savedSkill =

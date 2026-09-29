@@ -3,6 +3,8 @@ package com.serviceco.serviceco_provider_service.controller;
 import com.serviceco.serviceco_provider_service.model.dto.*;
 import com.serviceco.serviceco_provider_service.services.ProviderServiceImpl;
 import com.serviceco.serviceco_provider_service.utility.ProviderStatus;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -13,17 +15,28 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-
+@Tag(
+        name = "Provider APIs",
+        description = "APIs for managing service providers"
+)
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/providers")
 public class ProvderController {
     private final ProviderServiceImpl providerService;
+    @Operation(
+            summary = "Create a new provider",
+            description = "Creates a new service provider with the provided details."
+    )
     @PostMapping
     public ResponseEntity<ProviderResponse> saveProvider(@Valid  @RequestBody ProviderRequest providerRequest){
         ProviderResponse providerResponse=providerService.createProvider(providerRequest);
         return  new ResponseEntity<>(providerResponse, HttpStatus.CREATED);
     }
+    @Operation(
+            summary = "Get provider by ID",
+            description = "Retrieves a service provider by their unique ID."
+    )
     @GetMapping("/{id}")
     public ResponseEntity<ProviderResponse> getProvider(
             @PathVariable Long id) {
@@ -32,7 +45,10 @@ public class ProvderController {
                 providerService.getProvider(id)
         );
     }
-
+    @Operation(
+            summary = "Get all providers",
+            description = "Retrieves a paginated list of all service providers, optionally filtered by location."
+    )
     @GetMapping
     public ResponseEntity<Page<ProviderSummaryResponse>> getAllProviders(@RequestParam(required = false)
                                                                        String location,
@@ -46,6 +62,10 @@ public class ProvderController {
                 providerService.getAllProviders(location,pageable)
         );
     }
+    @Operation(
+            summary = "Search providers",
+            description = "Searches for service providers based on location, skill, and availability status."
+    )
     @GetMapping("/search")
     public ResponseEntity<Page<ProviderSearchResponse>> searchProviders(
 
@@ -71,7 +91,9 @@ public class ProvderController {
                 )
         );
     }
-
+@Operation(
+        summary = "Update provider details",
+        description = "Updates the details of an existing service provider identified by their unique ID.")
     @PutMapping("/{id}")
     public ResponseEntity<ProviderResponse> updateProvider(
             @PathVariable Long id,
@@ -81,7 +103,9 @@ public class ProvderController {
                 providerService.updateProvider(id, request)
         );
     }
-
+@Operation(
+        summary = "Delete provider",
+        description = "Deletes an existing service provider identified by their unique ID.")
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteProvider(
             @PathVariable Long id) {
@@ -90,6 +114,10 @@ public class ProvderController {
 
         return ResponseEntity.noContent().build();
     }
+    @Operation(
+            summary = "Update provider availability",
+            description = "Updates the availability status of an existing service provider identified by their unique ID."
+    )
     @PatchMapping("/{id}/availability")
     public ResponseEntity<ProviderResponse> updateAvailability(
             @PathVariable Long id,
@@ -99,6 +127,10 @@ public class ProvderController {
                 providerService.updateAvailability(id, request)
         );
     }
+    @Operation(
+            summary = "Add skill to provider",
+            description = "Adds a new skill to an existing service provider identified by their unique ID."
+    )
     @PostMapping("/{providerId}/skills")
     public ResponseEntity<SkillResponse> addSkill(
             @PathVariable Long providerId,
@@ -113,6 +145,10 @@ public class ProvderController {
                         )
                 );
     }
+    @Operation(
+            summary = "Get skills of provider",
+            description = "Retrieves a list of skills associated with an existing service provider identified by their unique ID."
+    )
     @GetMapping("/{providerId}/skills")
     public ResponseEntity<List<SkillResponse>> getSkills(
             @PathVariable Long providerId) {
@@ -121,6 +157,10 @@ public class ProvderController {
                 providerService.getSkills(providerId)
         );
     }
+    @Operation(
+            summary = "Delete skill from provider",
+            description = "Deletes a skill from an existing service provider identified by their unique ID."
+    )
     @DeleteMapping("/{providerId}/skills/{skillId}")
     public ResponseEntity<Void> deleteSkill(
             @PathVariable Long providerId,
