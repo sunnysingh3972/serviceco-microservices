@@ -25,8 +25,9 @@ public class ProviderServiceImpl implements ProviderService{
     private final ProviderMapper providerMapper;
     private  final ProviderSkillRepository providerSkillRepository;
     @Override
-    public ProviderResponse createProvider(ProviderRequest request) {
+    public ProviderResponse createProvider(ProviderRequest request,Long userId) {
         Provider provider=providerMapper.toEntity(request);
+        provider.setUserId(userId);
         Provider savedProvider = providerRepository.save(provider);
         return providerMapper.toResponse(savedProvider);
     }
@@ -194,5 +195,16 @@ public class ProviderServiceImpl implements ProviderService{
                                 ));
 
         providerSkillRepository.delete(skill);
+    }
+    @Override
+    public ProviderResponse getProviderByUserId(Long userId) {
+        Provider provider = providerRepository.findByUserId(userId)
+                .orElseThrow(() ->
+                        new ProviderNotFoundException(
+                                "Provider profile not found for user ID: " + userId
+                        )
+                );
+
+        return providerMapper.toResponse(provider);
     }
 }

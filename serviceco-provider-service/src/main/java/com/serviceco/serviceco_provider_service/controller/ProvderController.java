@@ -13,6 +13,8 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 
 import java.util.List;
 @Tag(
@@ -29,8 +31,9 @@ public class ProvderController {
             description = "Creates a new service provider with the provided details."
     )
     @PostMapping
-    public ResponseEntity<ProviderResponse> saveProvider(@Valid  @RequestBody ProviderRequest providerRequest){
-        ProviderResponse providerResponse=providerService.createProvider(providerRequest);
+    public ResponseEntity<ProviderResponse> saveProvider( @AuthenticationPrincipal Jwt jwt,@Valid  @RequestBody ProviderRequest providerRequest){
+        Long userId = Long.valueOf(jwt.getSubject());
+        ProviderResponse providerResponse=providerService.createProvider(providerRequest,userId);
         return  new ResponseEntity<>(providerResponse, HttpStatus.CREATED);
     }
     @Operation(
@@ -172,5 +175,19 @@ public class ProvderController {
         );
 
         return ResponseEntity.noContent().build();
+    }
+    @Operation(
+            summary = "Get current provider profile",
+            description = "Retrieves the profile associated with the authenticated provider."
+    )
+    @GetMapping("/me")
+    public ResponseEntity<ProviderResponse> getMyProvider(
+            @AuthenticationPrincipal Jwt jwt) {
+
+        Long userId = Long.valueOf(jwt.getSubject());
+
+        return ResponseEntity.ok(
+                providerService.getProviderByUserId(userId)
+        );
     }
 }

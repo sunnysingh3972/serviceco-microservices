@@ -13,7 +13,7 @@ import org.springframework.data.repository.query.Param;
 import java.util.Optional;
 
 public interface ProviderRepository extends JpaRepository<Provider,Long> {
-
+    Optional<Provider> findByUserId(Long userId);
     Page<Provider> findByLocationIgnoreCase(String location, Pageable pageable);
     @Query(value = """
             Select DISTINCT new com.serviceco.serviceco_provider_service.model.dto.ProviderSearchResponse(

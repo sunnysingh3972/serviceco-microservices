@@ -12,7 +12,8 @@ import java.util.List;
 public interface  ProviderService {
 
     ProviderResponse createProvider(
-            ProviderRequest request);
+            ProviderRequest request,
+            Long userId);
 
     ProviderResponse getProvider(Long id);
 
@@ -51,4 +52,5 @@ public interface  ProviderService {
             Long providerId,
             Long skillId
     );
+    ProviderResponse getProviderByUserId(Long userId);
 }
