@@ -1,0 +1,19 @@
+# Ignore local Spring Boot configuration in all services
+**/src/main/resources/application.properties
+**/src/main/resources/application-local.yml
+
+# Secrets
+**/.env
+**/.env.*
+
+# Maven build output
+**/target/
+
+# IDE files
+.idea/
+.vscode/
+*.iml
+
+# Logs and compiled files
+*.log
+*.class
