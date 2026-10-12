@@ -10,6 +10,8 @@ import com.serviceco.serviceco_booking_service.model.dto.BookingResponse;
 import com.serviceco.serviceco_booking_service.model.dto.ProviderResponse;
 import com.serviceco.serviceco_booking_service.repository.BookingRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -18,6 +20,7 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 @Service
@@ -28,6 +31,8 @@ public class BookingServiceImpl implements BookingService {
     private final ProviderClient providerClient;
     private final BookingMapper bookingMapper;
     private final BookingPersistenceService bookingPersistenceService;
+    private final ProviderOwnershipService providerOwnershipService;
+    private final CurrentUserService currentUserService;
 
     @Override
     public BookingResponse createBooking(BookingRequest request,String idempotencyKey) {
@@ -46,7 +51,7 @@ public class BookingServiceImpl implements BookingService {
                     "Provider is not available for booking"
             );
         }
-
+        Long customerId = currentUserService.getCurrentUserId();
         // 3. Normalize requested skill
         String requestedSkill =
                 request.serviceSkill().trim().toUpperCase();
@@ -100,7 +105,7 @@ public class BookingServiceImpl implements BookingService {
                 );
         Optional<Booking> existingBooking =
                 bookingRepository.findByCustomerIdAndIdempotencyKey(
-                        request.customerId(),
+                        customerId,
                         idempotencyKey
                 );
         if (existingBooking.isPresent()) {
@@ -111,7 +116,7 @@ public class BookingServiceImpl implements BookingService {
 
         // 9. Create Booking entity
         Booking booking = Booking.builder()
-                .customerId(request.customerId())
+                .customerId(customerId)
                 .providerId(request.providerId())
                 .serviceSkill(requestedSkill)
                 .bookingDate(bookingStart)
@@ -136,23 +141,64 @@ public class BookingServiceImpl implements BookingService {
         return bookingMapper.toResponse(savedBooking);
     }
 
+
     @Override
     public BookingResponse getBooking(Long bookingId) {
-        Booking booking =
-                bookingRepository.findById(bookingId)
-                        .orElseThrow(() ->
-                                new BookingNotFoundException(
-                                        "Booking not found with ID: " + bookingId
-                                )
-                        );
 
-        return bookingMapper.toResponse(booking);
+        Booking booking = bookingRepository.findById(bookingId)
+                .orElseThrow(() ->
+                        new BookingNotFoundException(
+                                "Booking not found with ID: " + bookingId
+                        )
+                );
+
+        Authentication authentication =
+                SecurityContextHolder.getContext().getAuthentication();
+
+        if (authentication == null || !authentication.isAuthenticated()) {
+            throw new AccessDeniedException("Authentication is required");
+        }
+        boolean isAdmin = authentication.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
+
+        if (isAdmin) {
+            return bookingMapper.toResponse(booking);
+        }
+
+        boolean isCustomer = authentication.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_CUSTOMER"));
+
+        if (isCustomer) {
+            Long currentUserId = currentUserService.getCurrentUserId();
+
+            if (Objects.equals(booking.getCustomerId(), currentUserId)) {
+                return bookingMapper.toResponse(booking);
+            }
+
+            throw new AccessDeniedException(
+                    "You are not authorized to view this booking");
+        }
+
+        boolean isProvider = authentication.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_PROVIDER"));
+
+        if (isProvider) {
+            providerOwnershipService.verifyProviderOwnership(
+                    booking.getProviderId());
+
+            return bookingMapper.toResponse(booking);
+        }
+
+        throw new AccessDeniedException(
+                "You are not authorized to view this booking");
     }
 
     @Override
     public BookingResponse acceptBooking(Long bookingId) {
         Booking booking = getBookingEntity(bookingId);
-
+        providerOwnershipService.verifyProviderOwnership(
+                booking.getProviderId()
+        );
         validateTransition(
                 booking,
                 BookingStatus.ACCEPTED
@@ -168,7 +214,9 @@ public class BookingServiceImpl implements BookingService {
     @Override
     public BookingResponse rejectBooking(Long bookingId) {
         Booking booking = getBookingEntity(bookingId);
-
+        providerOwnershipService.verifyProviderOwnership(
+                booking.getProviderId()
+        );
         validateTransition(
                 booking,
                 BookingStatus.REJECTED
@@ -213,6 +261,9 @@ public class BookingServiceImpl implements BookingService {
     @Override
     public BookingResponse completeBooking(Long bookingId) {
         Booking booking = getBookingEntity(bookingId);
+        providerOwnershipService.verifyProviderOwnership(
+                booking.getProviderId()
+        );
 
         validateTransition(
                 booking,
@@ -225,6 +276,55 @@ public class BookingServiceImpl implements BookingService {
                 bookingRepository.save(booking)
         );
     }
+
+    @Override
+    public Page<BookingResponse> getMyBookings(Pageable pageable) {
+        Authentication authentication =
+                SecurityContextHolder.getContext().getAuthentication();
+
+        if (authentication == null || !authentication.isAuthenticated()) {
+            throw new AccessDeniedException("Authentication is required");
+        }
+
+        boolean isAdmin = authentication.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
+
+        // Admin can view all bookings
+        if (isAdmin) {
+            return bookingRepository.findAll(pageable)
+                    .map(bookingMapper::toResponse);
+        }
+
+        boolean isCustomer = authentication.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_CUSTOMER"));
+
+        // Customer can view only their own bookings
+        if (isCustomer) {
+            Long customerId = currentUserService.getCurrentUserId();
+
+            return bookingRepository.findByCustomerId(customerId, pageable)
+                    .map(bookingMapper::toResponse);
+        }
+
+        boolean isProvider = authentication.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_PROVIDER"));
+
+        // Provider can view bookings assigned to their provider profile
+        if (isProvider) {
+            ProviderResponse provider =
+                    providerClient.getCurrentProvider(
+                            currentUserService.getAuthorizationHeader()
+                    );
+
+            return bookingRepository.findByProviderId(provider.id(), pageable)
+                    .map(bookingMapper::toResponse);
+        }
+
+        throw new AccessDeniedException(
+                "You are not authorized to view bookings"
+        );
+    }
+
     private Booking getBookingEntity(Long bookingId) {
 
         return bookingRepository.findById(bookingId)

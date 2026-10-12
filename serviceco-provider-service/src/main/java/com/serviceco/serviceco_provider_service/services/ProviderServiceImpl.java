@@ -24,6 +24,7 @@ public class ProviderServiceImpl implements ProviderService{
     private final ProviderRepository providerRepository;
     private final ProviderMapper providerMapper;
     private  final ProviderSkillRepository providerSkillRepository;
+    private final ProviderOwnershipService providerOwnershipService;
     @Override
     public ProviderResponse createProvider(ProviderRequest request,Long userId) {
         Provider provider=providerMapper.toEntity(request);
@@ -54,13 +55,13 @@ public class ProviderServiceImpl implements ProviderService{
 
     @Override
     public ProviderResponse updateProvider(Long id, ProviderRequest request) {
+        providerOwnershipService.verifyOwnershipOrAdmin(id);
         Provider provider =
                 providerRepository.findById(id)
                         .orElseThrow(() ->
                                 new ProviderNotFoundException(
                                         "Provider not found with id: " + id
                                 ));
-
         provider.setName(request.name());
         provider.setEmail(request.email());
         provider.setPhoneNumber(request.phoneNumber());
@@ -73,6 +74,7 @@ public class ProviderServiceImpl implements ProviderService{
 
     @Override
     public void deleteProvider(Long id) {
+        providerOwnershipService.verifyOwnershipOrAdmin(id);
         Provider provider =
                 providerRepository.findById(id)
                         .orElseThrow(() ->
@@ -103,6 +105,7 @@ public class ProviderServiceImpl implements ProviderService{
 
     @Override
     public ProviderResponse updateAvailability(Long id, AvailabilityUpdateRequest request) {
+        providerOwnershipService.verifyOwnershipOrAdmin(id);
         Provider provider =
                 providerRepository.findById(id)
                         .orElseThrow(() ->
@@ -120,7 +123,7 @@ public class ProviderServiceImpl implements ProviderService{
     public SkillResponse addSkill(
             Long providerId,
             SkillRequest request) {
-
+        providerOwnershipService.verifyOwnershipOrAdmin(providerId);
         Provider provider =
                 providerRepository.findById(providerId)
                         .orElseThrow(() ->
@@ -162,6 +165,7 @@ public class ProviderServiceImpl implements ProviderService{
     @Override
     @Transactional
     public List<SkillResponse> getSkills(Long providerId) {
+        providerOwnershipService.verifyOwnershipOrAdmin(providerId);
         providerRepository.findById(providerId)
                 .orElseThrow(() ->
                         new ProviderNotFoundException(
@@ -183,6 +187,7 @@ public class ProviderServiceImpl implements ProviderService{
     @Override
     @Transactional
     public void deleteSkill(Long providerId, Long skillId) {
+        providerOwnershipService.verifyOwnershipOrAdmin(providerId);
         ProviderSkill skill =
                 providerSkillRepository
                         .findByIdAndProviderId(

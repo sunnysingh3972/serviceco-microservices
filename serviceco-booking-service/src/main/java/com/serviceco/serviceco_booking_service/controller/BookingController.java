@@ -5,6 +5,9 @@ import com.serviceco.serviceco_booking_service.model.dto.BookingResponse;
 import com.serviceco.serviceco_booking_service.services.BookingService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
@@ -51,5 +54,12 @@ public class BookingController {
             @PathVariable Long bookingId) {
 
         return bookingService.completeBooking(bookingId);
+    }
+    @GetMapping("/my")
+    @ResponseStatus(HttpStatus.OK)
+    public Page<BookingResponse> getMyBookings(
+            @PageableDefault(page = 0, size = 10)
+            Pageable pageable) {
+        return bookingService.getMyBookings(pageable);
     }
 }

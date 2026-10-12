@@ -9,9 +9,6 @@ import java.time.LocalDateTime;
 
 public record BookingRequest(
 
-        @NotNull(message = "Customer ID is required")
-        Long customerId,
-
         @NotNull(message = "Provider ID is required")
         Long providerId,
 

@@ -2,6 +2,8 @@ package com.serviceco.serviceco_booking_service.repository;
 
 import com.serviceco.serviceco_booking_service.model.Booking;
 import com.serviceco.serviceco_booking_service.model.BookingStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -28,5 +30,14 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
     Optional<Booking> findByCustomerIdAndIdempotencyKey(
             Long customerId,
             String idempotencyKey
+    );
+    Page<Booking> findByCustomerId(
+            Long customerId,
+            Pageable pageable
+    );
+
+    Page<Booking> findByProviderId(
+            Long providerId,
+            Pageable pageable
     );
 }
