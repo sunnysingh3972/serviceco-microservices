@@ -15,28 +15,32 @@ import java.util.Optional;
 public interface ProviderRepository extends JpaRepository<Provider,Long> {
     Optional<Provider> findByUserId(Long userId);
     Page<Provider> findByLocationIgnoreCase(String location, Pageable pageable);
-    @Query(value = """
-            Select DISTINCT new com.serviceco.serviceco_provider_service.model.dto.ProviderSearchResponse(
+    @Query(
+            value = """
+        SELECT DISTINCT new com.serviceco.serviceco_provider_service.model.dto.ProviderSearchResponse(
             p.id,
             p.name,
             p.location,
             p.hourlyRate,
             p.rating,
-            p.status)
-           from Provider p
-           join p.skills s
-           where LOWER(p.location) = LOWER(:location)
-              and LOWER(s.skillName) = LOWER(:skill)
-                and p.status = :status
-           """,
-    countQuery = """
-            Select  count(Distinct p.id)
-           from Provider p
-           join p.skills s
-           where LOWER(p.location) = LOWER(:location)
-              and LOWER(s.skillName) = LOWER(:skill)
-                and p.status = :status
-           """)
+            p.status
+        )
+        FROM Provider p
+        JOIN p.skills s
+        WHERE LOWER(p.location) = LOWER(:location)
+          AND LOWER(s.skillName) = LOWER(:skill)
+          AND p.status = :status
+        ORDER BY p.rating DESC, p.hourlyRate ASC, p.id ASC
+        """,
+            countQuery = """
+        SELECT COUNT(DISTINCT p.id)
+        FROM Provider p
+        JOIN p.skills s
+        WHERE LOWER(p.location) = LOWER(:location)
+          AND LOWER(s.skillName) = LOWER(:skill)
+          AND p.status = :status
+        """
+    )
     Page<ProviderSearchResponse> searchProviders(
             @Param("location") String location,
             @Param("skill") String skill,
