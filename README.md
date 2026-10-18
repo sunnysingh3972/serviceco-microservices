@@ -1,71 +1,93 @@
 # ServiceCo — Service Provider Marketplace
 
-ServiceCo is a Java and Spring Boot microservices project for connecting customers with local service providers such as cooks, babysitters, and cleaners. It demonstrates REST API design, service discovery, inter-service communication, JWT-based security, booking lifecycle management, and provider matching foundations.
+ServiceCo is a Java and Spring Boot microservices project that connects customers with local service providers such as cooks, cleaners, and babysitters. It demonstrates REST API design, JWT authentication, role-based authorization, service discovery, inter-service communication, booking lifecycle management, concurrency control, and budget-aware provider recommendations.
 
-> **Project status:** Auth, Provider, Booking, Eureka Discovery Server, and API Gateway are implemented in the current development flow. Matching Service is registered with Eureka and its initial project/DTO foundation is in place; its Feign client and matching/ranking logic are still in progress.
+> **Project status:** Core microservice functionality is implemented and the main flows have been manually exercised. Matching Service returns ranked recommendations, and downstream Provider Service unavailability is mapped to a custom HTTP `503 Service Unavailable` response through both the Matching endpoint and API Gateway. Broader automated testing, deployment automation, and production hardening remain future work.
 
----
+## Contents
+
+- [Features](#features)
+- [Architecture](#architecture)
+- [Services and ports](#services-and-ports)
+- [Technology stack](#technology-stack)
+- [Authentication and authorization](#authentication-and-authorization)
+- [API Gateway](#api-gateway)
+- [Provider Service](#provider-service)
+- [Booking Service](#booking-service)
+- [Matching Service](#matching-service)
+- [Databases and migrations](#databases-and-migrations)
+- [Run locally](#run-locally)
+- [Build and verify](#build-and-verify)
+- [Resilience and error handling](#resilience-and-error-handling)
+- [Testing and roadmap](#testing-and-roadmap)
+- [Repository structure](#repository-structure)
+
+## Features
+
+- **Authentication:** User registration and login, BCrypt password hashing, JWT issuance, and role-based authorization.
+- **Provider management:** Provider profiles, skills, availability, filtering, search, and pagination.
+- **Resource ownership:** Provider profile updates and booking actions are protected by authenticated-user ownership checks, not role checks alone.
+- **Booking management:** Booking status transitions, customer/provider access rules, idempotency, overlapping-booking validation, and pessimistic locking.
+- **Service discovery:** Eureka registration and discovery for inter-service calls.
+- **API Gateway:** A single entry point routes Auth, Provider, Booking, and Matching requests.
+- **Provider recommendations:** Matching filters candidates by location, skill, status, and optional budget, then scores and ranks results.
+- **Consistent failure responses:** Matching Service maps downstream provider unavailability to an HTTP `503` response with a readable JSON message.
 
 ## Architecture
 
 ```text
-                         Client / Postman
-                                |
-                                v
-                       API Gateway :8084
-                                |
-               +----------------+----------------+
-               |                |                |
-               v                v                v
-         Auth Service     Provider Service   Booking Service
-            :8083              :8080             :8082
-               |                |                |
-               v                v                v
-         serviceco_auth      serviceco       serviceco_booking
-               
-        Matching Service :8085 (in progress)
-                   |
-                   | planned OpenFeign integration
-                   v
-             Provider Service
+                             Client / Postman
+                                    |
+                                    v
+                           API Gateway :8084
+                                    |
+              +---------------------+---------------------+
+              |                     |                     |
+              v                     v                     v
+        Auth Service          Provider Service       Booking Service
+           :8083                  :8080                  :8082
+                                    ^
+                                    |
+                          OpenFeign + Eureka
+                                    |
+                                    |
+                            Matching Service
+                                  :8085
 
-             Eureka :8761
-      Service registration/discovery
+                     Eureka Discovery Server :8761
 ```
 
-Each business service owns its database/schema boundary. Services exchange data through HTTP APIs rather than cross-service JPA relationships.
+Business services communicate through HTTP APIs. Each database-backed service owns its data and schema; the project does not use cross-service JPA relationships.
 
 ## Services and ports
 
-| Service | Port | Responsibility | Status |
-|---|---:|---|---|
-| API Gateway | `8084` | Common entry point; routes requests to Auth, Provider, and Booking | Implemented; routes verified |
-| Auth Service | `8083` | Registration, login, user roles, JWT issuance | Implemented |
-| Provider Service | `8080` | Provider profiles, skills, availability, search, profile ownership | Implemented |
-| Booking Service | `8082` | Booking creation, lifecycle, idempotency, concurrency, booking ownership | Implemented |
-| Matching Service | `8085` | Provider matching and ranking | Initial project, Eureka registration, and response DTO in place; matching logic in progress |
-| Eureka Discovery Server | `8761` | Service registration and discovery | Implemented |
+| Service | Port | Responsibility |
+|---|---:|---|
+| API Gateway | `8084` | Routes client requests to downstream services |
+| Auth Service | `8083` | Registration, login, user roles, and JWT issuance |
+| Provider Service | `8080` | Provider profiles, skills, availability, and search |
+| Booking Service | `8082` | Booking creation, status transitions, idempotency, and concurrency protection |
+| Matching Service | `8085` | Candidate filtering, recommendation scoring, ranking, and pagination |
+| Eureka Discovery Server | `8761` | Service registration and discovery |
 
 ## Technology stack
 
-- Java 21 language target (local JDK may be newer)
+- Java 21 target (the local JDK may be newer)
 - Spring Boot 4.1.1
 - Spring Cloud 2025.1.3
 - Spring Web MVC for business services
 - Spring Cloud Gateway Server WebFlux for the API Gateway
 - Spring Data JPA and Hibernate
-- MySQL and Flyway migrations
-- Spring Security and JWT (JJWT in Auth Service; OAuth2 Resource Server in protected services)
+- MySQL and Flyway database migrations
+- Spring Security and JWT
 - Netflix Eureka, OpenFeign, and Spring Cloud LoadBalancer
-- Maven / Maven Wrapper
-- JUnit 5 and Mockito (test coverage remains a continuing task)
-- Postman, IntelliJ IDEA, and VS Code
+- Maven Wrapper
+- JUnit and Mockito dependencies for testing
+- Postman for manual API verification
 
----
+## Authentication and authorization
 
-## Authentication and security
-
-Auth Service owns user identities, password hashes, and roles. Current roles are:
+Auth Service owns user identities, password hashes, and roles. The current roles are:
 
 ```text
 CUSTOMER
@@ -76,70 +98,67 @@ ADMIN
 ### Login flow
 
 1. A user registers through `POST /api/auth/register`.
-2. Passwords are hashed with BCrypt before being stored.
-3. Login uses Spring Security's `AuthenticationManager` and `UserDetailsService` to verify credentials.
-4. Auth Service issues a signed JWT containing the user ID as `sub` and the role as a claim.
-5. Protected services validate the JWT locally and map the role claim to Spring Security authorities. They do not need to query the Auth database for every request.
+2. The password is hashed with BCrypt before storage.
+3. Login verifies credentials using Spring Security.
+4. Auth Service issues a signed JWT. The user ID is carried in the `sub` claim and the role is included as a claim.
+5. Protected services validate the JWT and map the role claim to Spring Security authorities.
 
-Send a token on protected requests using:
+Send the token on protected requests using:
 
 ```http
 Authorization: Bearer <JWT>
 ```
 
-### Identity and resource ownership
+### Identity and ownership
 
-Auth user IDs and Provider profile IDs are different identifiers. The Provider profile stores the owning Auth user ID in `providers.user_id`; it is derived from the authenticated JWT, not trusted from the request body.
+Auth user IDs and Provider profile IDs represent different things. A provider profile stores its owning Auth user ID in `providers.user_id`. The owner ID is derived from the authenticated JWT rather than trusted from a client-provided request field.
 
-Ownership checks are implemented for provider profile operations and booking actions. Booking reads are restricted by customer/provider ownership, with an admin exemption according to the current access policy. These checks complement role-based authorization: a `PROVIDER` role alone does not grant access to every provider's records.
+Booking creation derives the customer ID from the JWT subject. Booking reads and lifecycle actions apply role and ownership rules; administrators have the broader access permitted by the current policy.
 
-> Local configuration and signing keys must remain outside source control. Do not commit passwords, JWT secrets, or real environment credentials.
-
----
+> **Security note:** Keep database credentials, JWT signing keys, and other secrets in local configuration or a proper secrets manager. Do not commit credentials or real environment secrets to source control.
 
 ## API Gateway
 
-The reactive Spring Cloud Gateway runs on port `8084`. It uses Eureka service discovery and LoadBalancer to route requests by path. It forwards the original request, including the `Authorization` header when supplied by the client; the downstream service continues to validate the JWT and enforce access rules.
+The reactive Gateway runs on port `8084`, uses Eureka and Spring Cloud LoadBalancer for service discovery, and routes requests by path. It forwards the request to the relevant service, where JWT validation and authorization are enforced.
 
-| Incoming path | Destination service |
+| Incoming path | Destination |
 |---|---|
 | `/api/auth/**` | `lb://serviceco-auth-service` |
 | `/api/providers/**` | `lb://serviceco-provider-service` |
 | `/api/bookings/**` | `lb://serviceco-booking-service` |
+| `/api/matching/**` | `lb://serviceco-matching-service` |
 
-Health endpoint:
+Gateway health endpoint:
 
 ```http
 GET http://localhost:8084/actuator/health
 ```
 
-Example request through the Gateway:
+Example provider list request through the Gateway:
 
 ```http
 GET http://localhost:8084/api/providers?page=0&size=10
 ```
 
----
-
 ## Provider Service
 
-Provider Service owns provider profiles and skills. It supports CRUD, availability updates, skill management, pagination, filtering, and search. Provider search uses a DTO projection to return selected fields rather than full entities.
+Provider Service owns provider profiles and their skills. It supports CRUD operations, availability changes, skill management, filtered search, and pagination. Provider search returns a DTO projection rather than exposing full persistence entities.
 
 ### Main endpoints
 
 | Method | Endpoint | Purpose |
 |---|---|---|
-| `POST` | `/api/providers` | Create a provider profile linked to the authenticated user |
-| `GET` | `/api/providers/me` | Fetch the authenticated provider's own profile |
-| `GET` | `/api/providers/{id}` | Fetch provider details by profile ID |
+| `POST` | `/api/providers` | Create a provider profile for the authenticated user |
+| `GET` | `/api/providers/me` | Get the authenticated provider's own profile |
+| `GET` | `/api/providers/{id}` | Get a provider by profile ID |
 | `GET` | `/api/providers?page=0&size=10` | List providers with pagination |
 | `GET` | `/api/providers/search?location=Noida&skill=COOKING&status=AVAILABLE&page=0&size=10` | Search by location, skill, status, and pagination |
-| `PUT` | `/api/providers/{id}` | Update provider details; ownership enforced |
-| `DELETE` | `/api/providers/{id}` | Delete provider profile; ownership enforced |
-| `PATCH` | `/api/providers/{id}/availability` | Update availability; ownership enforced |
-| `POST` | `/api/providers/{providerId}/skills` | Add a skill; ownership enforced |
-| `GET` | `/api/providers/{providerId}/skills` | List provider skills |
-| `DELETE` | `/api/providers/{providerId}/skills/{skillId}` | Delete a skill; ownership enforced |
+| `PUT` | `/api/providers/{id}` | Update a provider profile, subject to ownership rules |
+| `DELETE` | `/api/providers/{id}` | Delete a provider profile, subject to ownership rules |
+| `PATCH` | `/api/providers/{id}/availability` | Update provider availability, subject to ownership rules |
+| `POST` | `/api/providers/{providerId}/skills` | Add a skill, subject to ownership rules |
+| `GET` | `/api/providers/{providerId}/skills` | List a provider's skills |
+| `DELETE` | `/api/providers/{providerId}/skills/{skillId}` | Delete a skill, subject to ownership rules |
 
 Provider statuses:
 
@@ -149,13 +168,11 @@ BUSY
 INACTIVE
 ```
 
-A provider has a one-to-many relationship with provider skills. Skills are lazily loaded, and database constraints/indexes protect skill uniqueness and improve search access.
-
----
+Provider skills use a one-to-many relationship with the provider profile. Skills are lazily loaded; indexes and database constraints support common lookup patterns and data integrity.
 
 ## Booking Service
 
-Booking Service owns booking records and status transitions. It stores `providerId` and `customerId` as identifiers rather than using cross-service JPA relationships.
+Booking Service owns booking records and their status transitions. It stores `customerId` and `providerId` as identifiers instead of using cross-service JPA relationships.
 
 ### Booking statuses
 
@@ -172,18 +189,23 @@ COMPLETED
 | Method | Endpoint | Purpose |
 |---|---|---|
 | `POST` | `/api/bookings` | Create a booking; requires an `Idempotency-Key` header |
-| `GET` | `/api/bookings/{bookingId}` | Fetch a booking when the caller is authorized to view it |
-| `GET` | `/api/bookings/my?page=0&size=10` | Fetch bookings for the authenticated customer/provider; admin can view all under current policy |
-| `PATCH` | `/api/bookings/{bookingId}/accept` | Accept a pending booking; provider ownership enforced |
-| `PATCH` | `/api/bookings/{bookingId}/reject` | Reject a pending booking; provider ownership enforced |
+| `GET` | `/api/bookings/{bookingId}` | Read a booking when caller authorization permits it |
+| `GET` | `/api/bookings/my?page=0&size=10` | List the authenticated user's bookings; admin behavior follows the current access policy |
+| `PATCH` | `/api/bookings/{bookingId}/accept` | Accept a pending booking; provider ownership is checked |
+| `PATCH` | `/api/bookings/{bookingId}/reject` | Reject a pending booking; provider ownership is checked |
 | `PATCH` | `/api/bookings/{bookingId}/cancel` | Cancel according to role, ownership, and status rules |
-| `PATCH` | `/api/bookings/{bookingId}/complete` | Complete an accepted booking; provider ownership enforced |
+| `PATCH` | `/api/bookings/{bookingId}/complete` | Complete an accepted booking; provider ownership is checked |
 
-### Customer identity
+### Example create-booking request
 
-The booking request body provides the provider, skill, booking time, and duration. The authenticated customer ID is derived from the JWT subject on the server, rather than trusting a `customerId` supplied by the client.
+The client sends the provider, skill, date/time, and duration. The customer ID is derived from the authenticated JWT, not accepted from the request body.
 
-Example request body:
+```http
+POST /api/bookings
+Authorization: Bearer <JWT>
+Idempotency-Key: <unique-key-for-this-request>
+Content-Type: application/json
+```
 
 ```json
 {
@@ -194,30 +216,69 @@ Example request body:
 }
 ```
 
-Include the idempotency header:
+Retrying with the same authenticated customer and idempotency key returns the existing booking rather than creating a duplicate. A replay returns the booking's current state; it does not reset a cancelled or completed booking to `PENDING`.
 
-```http
-Idempotency-Key: <unique-key-for-this-request>
-```
+### Validation and concurrency
 
-Retrying with the same authenticated customer and idempotency key returns the existing booking instead of creating a duplicate. A replay returns the booking's current status; it does not reset a cancelled/rejected/completed booking to `PENDING`.
-
-### Booking validation and concurrency
-
-- The Provider Service is called through OpenFeign and Eureka to validate provider availability, requested skill, and hourly rate.
-- Booking start/end times are checked for overlap. Back-to-back bookings are allowed.
-- A provider lock row and pessimistic locking protect the local booking persistence critical section.
+- Provider availability, requested skill, and hourly rate are obtained through the Provider Service API using OpenFeign and Eureka.
+- Booking start/end times are checked for overlap; adjacent bookings can be scheduled back-to-back.
+- A provider lock row and pessimistic locking protect the booking persistence critical section.
 - Booking status transitions are validated in the service layer.
-
----
 
 ## Matching Service
 
-Matching Service is the current development focus. It runs on port `8085` and registers with Eureka. Its initial project includes Spring Web MVC, Validation, OpenFeign, Eureka Client, LoadBalancer, and a local `ProviderSearchResponse` DTO matching the provider search response contract.
+Matching Service runs on port `8085` and registers with Eureka. It calls Provider Service via OpenFeign and gets candidates from the provider-search API.
 
-**Still in progress:** implement the Feign client for Provider Service, expose a matching endpoint, and add skill/location/availability filters and ranking (including rating-based sorting). These matching features should not be considered complete yet.
+### Matching endpoint
 
----
+Direct request:
+
+```http
+GET http://localhost:8085/api/matching/providers?location=Noida&skill=COOKING&status=AVAILABLE&maxHourlyRate=600&page=0&size=10
+```
+
+Through the Gateway:
+
+```http
+GET http://localhost:8084/api/matching/providers?location=Noida&skill=COOKING&status=AVAILABLE&maxHourlyRate=600&page=0&size=10
+```
+
+### Query parameters
+
+| Parameter | Description |
+|---|---|
+| `location` | Required location filter |
+| `skill` | Required service skill |
+| `status` | Provider status; defaults to `AVAILABLE` |
+| `maxHourlyRate` | Optional maximum hourly-rate budget |
+| `page` | Zero-based page number; defaults to `0` |
+| `size` | Page size; defaults to `10`, maximum `100` |
+
+### Recommendation behaviour
+
+- Retrieves provider-search pages through OpenFeign and Eureka discovery.
+- Applies the optional maximum hourly-rate filter before ranking.
+- Without a budget, the score is primarily based on provider rating.
+- With a budget, it combines rating (70% weight) and relative budget savings (30% weight).
+- Sorts by descending match score, then ascending hourly rate, then provider ID for deterministic ordering.
+- Applies pagination after filtering and ranking so page contents follow recommendation order.
+- Returns the provider details with a match score and a short explanation of the recommendation.
+
+## Resilience and error handling
+
+Matching Service maps Provider Service unavailability to a consistent HTTP `503 Service Unavailable` response. This failure response was manually checked through both the direct Matching endpoint and the API Gateway; the normal flow was also checked and returned `200 OK` when Provider Service was available.
+
+A Resilience4j circuit-breaker dependency/configuration and a Feign fallback factory are present in the code. The fallback factory's activation itself was not independently verified, so the circuit-breaker failure path should not yet be described as fully production-validated.
+
+Example downstream-unavailable response:
+
+```json
+{
+  "status": 503,
+  "error": "Service Unavailable",
+  "message": "Provider Service is currently unavailable. Please try again later."
+}
+```
 
 ## Databases and migrations
 
@@ -226,29 +287,28 @@ Matching Service is the current development focus. It runs on port `8085` and re
 | Provider Service | `serviceco` |
 | Auth Service | `serviceco_auth` |
 | Booking Service | `serviceco_booking` |
-| API Gateway / Matching Service | No service-owned database currently required for the implemented functionality |
+| API Gateway | No service-owned database required for current functionality |
+| Matching Service | No service-owned database required for current functionality |
 
 Flyway manages schema changes for the database-backed services. Hibernate schema validation is configured with `ddl-auto=validate`.
 
----
-
-## Local setup and running services
+## Run locally
 
 ### Prerequisites
 
-- Java 21 compatible toolchain (the local JDK can be newer)
+- Java toolchain compatible with the project's Java 21 target
 - Git
 - MySQL
-- IDE (IntelliJ IDEA or VS Code)
 - Postman
+- IDE such as VS Code or IntelliJ IDEA
 
 ### Local configuration
 
-Each service's `application.properties` is local configuration and should not be committed. Configure the database connection, Eureka URL, and (where required) the shared JWT signing key locally. Do not paste secrets into this README or commit them to Git.
+Each service needs its own local `application.properties` configuration. Configure the database connection, Eureka URL, and JWT signing configuration where required. Keep local properties and secrets out of source control. Property names and required values should be taken from the service's own configuration and code; do not copy production credentials into this file.
 
 ### Start order
 
-Start the services in this order so service discovery is available first:
+Start the Discovery Server before services that register with Eureka:
 
 1. Eureka Discovery Server — `8761`
 2. Auth Service — `8083`
@@ -257,78 +317,57 @@ Start the services in this order so service discovery is available first:
 5. API Gateway — `8084`
 6. Matching Service — `8085`
 
-Run each project from its own directory using the Maven Wrapper on Windows:
+Open a terminal in each service directory and run the following command on Windows:
 
 ```powershell
 .\mvnw.cmd spring-boot:run
 ```
 
-Compile a service with:
-
-```powershell
-.\mvnw.cmd clean compile
-```
-
-### Verify
+### Local checks
 
 - Eureka dashboard: `http://localhost:8761`
 - API Gateway health: `http://localhost:8084/actuator/health`
 - Provider list through Gateway: `http://localhost:8084/api/providers?page=0&size=10`
+- Matching recommendations through Gateway: `http://localhost:8084/api/matching/providers?location=Noida&skill=COOKING&status=AVAILABLE&page=0&size=10`
 
----
+## Build and verify
 
-## Development roadmap
+Run the Maven Wrapper from each service directory.
 
-### Provider Service
+Windows PowerShell:
 
-- [x] Provider CRUD, skills, and availability APIs
-- [x] Validation and centralized exception handling
-- [x] Search filtering, pagination, and DTO projection
-- [x] Flyway migrations and schema validation
-- [x] JWT-based current-provider lookup and profile ownership checks
+```powershell
+.\mvnw.cmd clean package
+```
 
-### Auth and security
+Unix-like shells:
 
-- [x] Registration and BCrypt password hashing
-- [x] `AuthenticationManager`-based login and JWT generation
-- [x] JWT validation and role mapping in protected services
-- [x] Customer identity derived from JWT for booking creation
-- [x] Customer/provider ownership checks for booking reads/actions
+```bash
+./mvnw clean package
+```
 
-### Infrastructure
+Repeat for all six services. `clean package` compiles and packages the service and runs any tests configured in that module. A service being up in Eureka does not, by itself, prove a clean package build or comprehensive test coverage.
 
-- [x] Eureka Discovery Server
-- [x] OpenFeign and LoadBalancer in service integration setup
-- [x] Reactive API Gateway routes for Auth, Provider, and Booking
-- [ ] More Gateway-level security and resilience configuration
+## Testing and roadmap
 
-### Booking
+The current development flow used manual Postman checks for key API paths, including provider search/matching, Gateway routing, and the Matching Service's normal and downstream-unavailable responses. Broader automated unit and integration test coverage is still a future improvement.
 
-- [x] Booking lifecycle and status-transition checks
-- [x] Provider availability and skill validation
-- [x] Idempotency key support
-- [x] Overlap detection and pessimistic locking
+- [x] Provider CRUD, skills, availability, search, filtering, and pagination
+- [x] JWT-based provider profile ownership checks
+- [x] Booking lifecycle and status-transition validation
+- [x] Idempotency support for booking creation
+- [x] Booking overlap checks and pessimistic locking
 - [x] Paginated `GET /api/bookings/my`
-- [ ] Broader automated unit/integration tests
-
-### Matching Service
-
-- [x] Initial service project and Eureka registration
-- [x] Provider search response DTO foundation
-- [ ] OpenFeign client to Provider Service
-- [ ] Matching API endpoint
-- [ ] Skill and location matching
-- [ ] Availability-aware results
-- [ ] Rating-based ranking and recommendations
-
-### Quality and deployment
-
-- [ ] Broader automated tests
-- [ ] Docker and Docker Compose
-- [ ] Production secrets/configuration strategy
-- [ ] Monitoring, logging, and resilience policies
-
----
+- [x] Eureka service discovery and OpenFeign integration
+- [x] Gateway routes for Auth, Provider, Booking, and Matching
+- [x] Matching filters, optional budget limit, scoring, ranking, and pagination
+- [x] Custom HTTP `503` error response for Provider Service unavailability
+- [ ] Independently verify Resilience4j fallback-factory activation
+- [ ] Expand automated unit and integration tests
+- [ ] Add Docker and Docker Compose
+- [ ] Add CI build workflow
+- [ ] Improve production secrets/configuration strategy
+- [ ] Expand monitoring, logging, and resilience policies
 
 ## Repository structure
 
@@ -337,11 +376,12 @@ serviceco-microservices/
 ├── serviceco-auth-service/
 ├── serviceco-provider-service/
 ├── serviceco-booking-service/
+├── serviceco-discovery-server/
 ├── serviceco-api-gateway/
 ├── serviceco-matching-service/
-├── serviceco-discovery-server/
-├── README.md
-└── .gitignore
+├── .github/                 # Add workflows here when CI is introduced
+├── .gitignore
+└── README.md
 ```
 
 ## Author
